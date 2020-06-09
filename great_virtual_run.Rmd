@@ -1,0 +1,263 @@
+---
+title: "Great Virtual Run Across Tennessee"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: scroll
+    horizontal_layout: scroll
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(shiny)
+library(tidyverse)
+library(rvest)
+library(XML)
+library(httr)
+library(jsonlite)
+library(DT)
+library(lubridate)
+
+df <- fromJSON("https://vacationwithoutacar.com/wp-admin/admin-ajax.php?action=wp_ajax_ninja_tables_public_action&table_id=3087&target_action=get-all-data")
+
+
+df$position <- str_remove(df$position, "#")
+# df$genplace <- str_remove(df$genplace, "#")
+
+
+june <- paste0 ("June 01 - June ",substr((Sys.Date()-5), 9, 10) )
+
+my_names <- c("Position", "Bib", "Name", "RAT Status", "RAT Finish", "Team", "Miles", "KM", "May", june, 
+              as.character(Sys.Date() - 4), 
+              as.character(Sys.Date() - 3), 
+              as.character(Sys.Date() - 2), 
+              as.character(Sys.Date() - 1), 
+              as.character(Sys.Date())
+              ) 
+
+names (df) <- my_names
+
+# names(df) <- names
+
+updated <- read_html("https://vacationwithoutacar.com") %>% 
+  html_node(".has-inline-color strong") %>% 
+  html_text() 
+
+
+df <- df %>% 
+  mutate_at (c("Position", "Bib", "Miles", "KM"), as.numeric) 
+
+df[7:12] <- map(df[7:12],
+                as.numeric)
+
+```
+
+Column {.tabset} 
+-------------------------------------
+
+### Connors  (and others)
+
+
+```{r}
+
+connors <- c (1955, 17766, 2046, 17199, 15589, 370, 4591, 14971, 1738, 17200, 5507, 3996, 15689, 15675, 1969, 14517, 14633, 6139, 1629,
+              10884, 15551, 1948, 2223, 1737, 2222, 1616, 6196, 1839, 2996, 107, 13227, 17963, 18091, 17741, 18927, 19314)
+
+df_2 <- df %>% dplyr::filter (Bib %in% connors) %>% 
+  mutate (`RAT Status` = parse_number(`RAT Status`)/100)
+
+DT::renderDataTable (
+  datatable(df_2 , #%>% select (names_select), 
+            options = list(pageLength = 40)
+            ) %>% 
+    DT::formatPercentage("RAT Status", 
+                         digits = 1)
+   
+)
+
+```
+
+
+### All Runners
+
+These standings will be posted every 2-4 hours until we get the live tracking up and running. `r updated`. 
+
+
+```{r}
+
+
+DT::renderDataTable (
+  
+  datatable(df 
+            )
+)
+
+
+```
+
+
+<!-- ### Connors (and others) Over Time -->
+
+<!-- ```{r} -->
+
+<!-- runners_names <- sort (df_2$Name) -->
+
+<!-- selectInput("runner",  -->
+<!--             "Runner", -->
+<!--             choices = c("All", runners_names) -->
+<!--             )   -->
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+
+
+<!-- p <- reactive({ -->
+
+<!--   if(input$runner == "All") -->
+
+<!--     p <- df_2 %>% -->
+<!--       ggplot(aes(ranking , group = Name, color=Name,fill=Name)) + -->
+<!--       geom_tile(aes(y = cumsum / 2, -->
+<!--                     height = cumsum, -->
+<!--                     width = 0.9), alpha = 0.9) + -->
+<!--       geom_text(aes(y = -5 + cumsum, x = ranking, label = Name), -->
+<!--                 hjust = 1, -->
+<!--                 colour = "black") + -->
+<!--       geom_text(aes(y = cumsum + 5, x = ranking, label = as.character(cumsum)), -->
+<!--                 colour = "black") + -->
+<!--       coord_flip(clip = "off", expand = FALSE) + -->
+<!--       scale_y_continuous(limits = c (0, max(temp$cumsum + 25))) + -->
+<!--       guides(color = FALSE, fill = FALSE)+ -->
+<!--       labs(title='{frame_time}', x = "",y="Miles") + -->
+<!--       theme(plot.title = element_text(hjust = 1, size = 22), -->
+<!--             axis.ticks.y = element_blank(), -->
+<!--             axis.text.y  = element_blank(), -->
+<!--             panel.background = element_rect(fill = "white"), -->
+<!--             plot.margin = margin(1, 1, 1, 3, "cm"), -->
+<!--             plot.background = element_rect( -->
+<!--               fill = "white", -->
+<!--               colour = "white", -->
+<!--               size = 1)) + -->
+<!--       transition_time(Day) + -->
+<!--       ease_aes('cubic-in-out')  -->
+
+
+<!--   }) -->
+
+
+
+```
+
+```{r include=FALSE}
+
+library(lubridate)
+
+name <- "Brian Schmidt"
+
+temp <- df_2 %>% 
+  select (Name, starts_with(c("May", "June"))) %>% 
+  pivot_longer(-Name, 
+               names_to = "Day",
+               values_to = "Miles") %>% 
+  mutate (Day = str_replace(Day, "May ", "05-")) %>% 
+  mutate (Day = paste0 ("2020-", Day)) %>% 
+  mutate (Day = ymd(Day)) %>% 
+  group_by (Name) %>% 
+  mutate (cumsum = cumsum (Miles)) %>% 
+  mutate (group = ifelse (Name == name, "1", "0")) 
+
+temp <- temp  %>% 
+  group_by (Day) %>% 
+  dplyr::mutate (ranking = rank (cumsum, ties.method = "first")) %>% 
+  arrange (Day, desc(ranking)) 
+
+library(gganimate)
+
+# All Runners
+# temp %>%
+#   ggplot(aes(ranking , group = Name, color=Name,fill=Name)) +
+#   geom_tile(aes(y = cumsum / 2,
+#                 height = cumsum,
+#                 width = 0.9), alpha = 0.9) +
+#   geom_text(aes(y = -5 + cumsum, x = ranking, label = Name),
+#             hjust = 1,
+#             colour = "black") +
+#   geom_text(aes(y = cumsum + 5, x = ranking, label = as.character(cumsum)),
+#             colour = "black") +
+#   coord_flip(clip = "off", expand = FALSE) +
+#   scale_y_continuous(limits = c (0, max(temp$cumsum + 25))) +
+#   guides(color = FALSE, fill = FALSE)+
+#   labs(title='{frame_time}', x = "",y="Miles") +
+#   theme(plot.title = element_text(hjust = 1, size = 22),
+#         axis.ticks.y = element_blank(),
+#         axis.text.y  = element_blank(),
+#         panel.background = element_rect(fill = "white"),
+#         plot.margin = margin(1, 1, 1, 3, "cm"),
+#         plot.background = element_rect(
+#           fill = "white",
+#           colour = "white",
+#           size = 1)) +
+#   transition_time(Day) +
+#   ease_aes('cubic-in-out')
+
+# Select Runner
+# p <- temp %>%
+#   mutate (Month = month (Day, label = TRUE),
+#           Day_R = day (Day),
+#           new_label = paste0 (Month, " ", Day_R)) %>%
+#   ggplot(aes(ranking , group = group, fill=group)) +
+#   geom_tile(aes(y = cumsum / 2,
+#                 height = cumsum,
+#                 width = 0.9), alpha = 0.9) +
+#   geom_text(aes(y = -5 + cumsum, x = ranking, label = Name),
+#             hjust = 1,
+#             colour = "black") +
+#   geom_text(aes(y = cumsum + 5, x = ranking, label = as.character(cumsum)),
+#             colour = "black") +
+#   coord_flip(clip = "off", expand = FALSE) +
+#   scale_fill_manual(values = c("#2780E3", "grey80" )) +
+#   scale_y_continuous(limits = c (0, max(temp$cumsum + 25))) +
+#   guides(color = FALSE, fill = FALSE)+
+#   labs(title='{frame_time}', x = "",y="Miles") +
+#   theme(plot.title = element_text(hjust = 1, size = 22),
+#         axis.ticks.y = element_blank(),
+#         axis.text.y  = element_blank(),
+#         panel.background = element_rect(fill = "white"),
+#         plot.margin = margin(1, 1, 1, 3, "cm"),
+#         plot.background = element_rect(
+#           fill = "white",
+#           colour = "white",
+#           size = 1)) +
+#   transition_time(Day) +
+#   ease_aes('cubic-in-out')
+# 
+# animate(p, nframes = 150, fps = 10, end_pause = 20, width = 900, height = 900)#+
+
+# p <- Cumulative.long %>%
+#     ggplot(aes(x = -DailyRank,y = CumulativeCase, group = PHU)) +
+#         geom_tile(aes(y = CumulativeCase / 2, height = CumulativeCase, fill = PHU), width = 0.9) +
+#         geom_text(aes(label = PHU), hjust = "right", colour = "black", fontface = "bold", nudge_y = -10) +
+#         geom_text(aes(label = scales::comma(CumulativeCase)), hjust = "left", nudge_y = 10, colour = "grey30") +
+#         coord_flip(clip="off") +
+#         scale_x_discrete("") +
+#         scale_y_continuous("",labels=scales::comma) +
+#         hrbrthemes::theme_ipsum(plot_title_size = 32, subtitle_size = 24, caption_size = 20, base_size = 20) +
+#         theme(panel.grid.major.y=element_blank(),
+#               panel.grid.minor.x=element_blank(),
+#               legend.position = "none",
+#               plot.margin = margin(1,1,1,8,"cm"), #top, right, bottom, left
+#               axis.text.y=element_blank()) +
+#         # gganimate code to transition by year:
+#         transition_time(Accurate_Episode_Date) +
+#         ease_aes('cubic-in-out') +
+#         labs(title='Public Health Units',
+#              subtitle='Number of COVID19 Cases reported {round(frame_time,0)}',
+#              caption='Source: data.ontario.ca
+# DUGroup.ca / @ResearchChat')
+# animate(p, nframes = 750, fps = 30, end_pause = 50, width = 1200, height = 900)#+
+
+
+```
+
